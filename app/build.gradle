@@ -1,0 +1,47 @@
+apply plugin: 'com.android.application'
+
+def twaManifest = [
+        applicationId: 'com.destinyitemmanager.app',
+        hostName: 'app.destinyitemmanager.com',
+        name: 'DIM',
+        color: '#000000',
+        shortcuts: [
+                // [name: 'Farming Mode', short_name: 'Farming', url: '/farm', icon: 'farm']
+        ]
+]
+
+android {
+    compileSdkVersion 29
+    defaultConfig {
+        applicationId twaManifest.applicationId
+        minSdkVersion 16
+        targetSdkVersion 29
+        versionCode 20
+        versionName "1.0.20"
+        resValue "color", "chromeColor", twaManifest.color
+        resValue "string", "appName", twaManifest.name
+        resValue "string", "launchUrl", "https://" + twaManifest.hostName
+        resValue "string", "hostName", twaManifest.hostName
+        resValue "string", "assetStatements", """[{
+                "relation": ["delegate_permission/common.handle_all_urls"],
+                "target": {
+                    "namespace": "web",
+                    "site": "https://$twaManifest.hostName"
+                }
+            }]"""
+    }
+    buildTypes {
+        release {
+            minifyEnabled true
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation 'com.google.androidbrowserhelper:androidbrowserhelper:1.0.0'
+}
