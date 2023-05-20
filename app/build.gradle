@@ -55,8 +55,8 @@ android {
         applicationId "com.destinyitemmanager.app"
         minSdkVersion 19
         targetSdkVersion 31
-        versionCode 26
-        versionName "1.0.26"
+        versionCode 27
+        versionName "1.0.27"
 
         // The name for the application
         resValue "string", "appName", twaManifest.name
