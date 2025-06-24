@@ -50,13 +50,14 @@ def twaManifest = [
 ]
 
 android {
-    compileSdkVersion 34
+    compileSdkVersion 36
+    namespace 'com.destinyitemmanager.app'
     defaultConfig {
         applicationId "com.destinyitemmanager.app"
         minSdkVersion 19
-        targetSdkVersion 34
-        versionCode 30
-        versionName "1.0.30"
+        targetSdkVersion 36
+        versionCode 31
+        versionName "1.0.31"
 
         // The name for the application
         resValue "string", "appName", twaManifest.name
