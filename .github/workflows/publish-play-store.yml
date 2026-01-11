@@ -89,6 +89,8 @@ jobs:
       
       - name: Build Release AAB
         run: |
+          # Note: Using 'gradle' command as this repo doesn't have a gradlew wrapper
+          # The gradle-build-action sets up gradle with the version specified in gradle-wrapper.properties
           gradle bundleRelease --no-daemon
         env:
           SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}

@@ -85,11 +85,17 @@ jobs:
           # Increment version code
           NEW_VERSION_CODE=$((CURRENT_VERSION_CODE + 1))
           
-          # Extract major.minor.patch from current version name
-          VERSION_BASE=$(echo "$CURRENT_VERSION_NAME" | sed 's/\.[0-9]*$//')
-          VERSION_PATCH=$(echo "$CURRENT_VERSION_NAME" | grep -oP '\.[0-9]+$' | tr -d '.')
-          NEW_VERSION_PATCH=$((VERSION_PATCH + 1))
-          NEW_VERSION_NAME="${VERSION_BASE}.${NEW_VERSION_PATCH}"
+          # Parse version name more robustly
+          # Check if version follows major.minor.patch pattern
+          if [[ "$CURRENT_VERSION_NAME" =~ ^([0-9]+\.[0-9]+)\.([0-9]+)$ ]]; then
+            VERSION_BASE="${BASH_REMATCH[1]}"
+            VERSION_PATCH="${BASH_REMATCH[2]}"
+            NEW_VERSION_PATCH=$((VERSION_PATCH + 1))
+            NEW_VERSION_NAME="${VERSION_BASE}.${NEW_VERSION_PATCH}"
+          else
+            # Fallback: just increment the version code suffix
+            NEW_VERSION_NAME="${CURRENT_VERSION_NAME%.*}.$NEW_VERSION_CODE"
+          fi
           
           # Update compileSdkVersion
           sed -i "s/compileSdkVersion [0-9]*/compileSdkVersion $LATEST_SDK/" app/build.gradle
@@ -113,6 +119,8 @@ jobs:
       - name: Verify Gradle build
         if: steps.check-update.outputs.update_needed == 'true'
         run: |
+          # Note: Using 'gradle' command as this repo doesn't have a gradlew wrapper
+          # The gradle-build-action sets up gradle with the version specified in gradle-wrapper.properties
           gradle assembleDebug --no-daemon
       
       - name: Create Pull Request

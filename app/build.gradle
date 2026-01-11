@@ -56,7 +56,10 @@ android {
     signingConfigs {
         release {
             if (System.getenv("SIGNING_KEY_ALIAS")) {
-                storeFile file("${System.getenv('GITHUB_WORKSPACE')}/release.keystore")
+                def keystorePath = System.getenv("GITHUB_WORKSPACE") 
+                    ? "${System.getenv('GITHUB_WORKSPACE')}/release.keystore"
+                    : "release.keystore"
+                storeFile file(keystorePath)
                 storePassword System.getenv("SIGNING_STORE_PASSWORD")
                 keyAlias System.getenv("SIGNING_KEY_ALIAS")
                 keyPassword System.getenv("SIGNING_KEY_PASSWORD")
