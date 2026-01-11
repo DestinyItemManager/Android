@@ -1,0 +1,158 @@
+name: Monthly SDK Bump
+
+on:
+  schedule:
+    # Run at 00:00 UTC on the first day of every month
+    - cron: '0 0 1 * *'
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  update-sdk:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      
+      - name: Get latest Android SDK version
+        id: sdk-version
+        run: |
+          # Fetch the latest stable SDK version from Android's official repository
+          # Using the latest stable version available in the Android SDK Platform packages
+          LATEST_SDK=$(curl -s https://dl.google.com/android/repository/repository2-3.xml | \
+            grep -oP '(?<=<remotePackage path="platforms;android-)[0-9]+' | \
+            sort -n | tail -1)
+          
+          # Fallback if API call fails - increment current version by 1
+          if [ -z "$LATEST_SDK" ]; then
+            CURRENT_SDK=$(grep -oP 'compileSdkVersion \K[0-9]+' app/build.gradle)
+            LATEST_SDK=$((CURRENT_SDK + 1))
+          fi
+          
+          echo "latest_sdk=$LATEST_SDK" >> $GITHUB_OUTPUT
+          echo "Latest SDK version: $LATEST_SDK"
+      
+      - name: Get current SDK versions
+        id: current-versions
+        run: |
+          COMPILE_SDK=$(grep -oP 'compileSdkVersion \K[0-9]+' app/build.gradle)
+          TARGET_SDK=$(grep -oP 'targetSdkVersion \K[0-9]+' app/build.gradle)
+          VERSION_CODE=$(grep -oP 'versionCode \K[0-9]+' app/build.gradle)
+          VERSION_NAME=$(grep -oP 'versionName "\K[^"]+' app/build.gradle)
+          
+          echo "compile_sdk=$COMPILE_SDK" >> $GITHUB_OUTPUT
+          echo "target_sdk=$TARGET_SDK" >> $GITHUB_OUTPUT
+          echo "version_code=$VERSION_CODE" >> $GITHUB_OUTPUT
+          echo "version_name=$VERSION_NAME" >> $GITHUB_OUTPUT
+          
+          echo "Current compileSdkVersion: $COMPILE_SDK"
+          echo "Current targetSdkVersion: $TARGET_SDK"
+          echo "Current versionCode: $VERSION_CODE"
+          echo "Current versionName: $VERSION_NAME"
+      
+      - name: Check if update is needed
+        id: check-update
+        run: |
+          LATEST_SDK="${{ steps.sdk-version.outputs.latest_sdk }}"
+          CURRENT_SDK="${{ steps.current-versions.outputs.compile_sdk }}"
+          
+          if [ "$LATEST_SDK" -gt "$CURRENT_SDK" ]; then
+            echo "update_needed=true" >> $GITHUB_OUTPUT
+            echo "SDK update needed: $CURRENT_SDK -> $LATEST_SDK"
+          else
+            echo "update_needed=false" >> $GITHUB_OUTPUT
+            echo "SDK is already up to date ($CURRENT_SDK)"
+          fi
+      
+      - name: Update SDK versions and version code
+        if: steps.check-update.outputs.update_needed == 'true'
+        run: |
+          LATEST_SDK="${{ steps.sdk-version.outputs.latest_sdk }}"
+          CURRENT_VERSION_CODE="${{ steps.current-versions.outputs.version_code }}"
+          CURRENT_VERSION_NAME="${{ steps.current-versions.outputs.version_name }}"
+          
+          # Increment version code
+          NEW_VERSION_CODE=$((CURRENT_VERSION_CODE + 1))
+          
+          # Parse version name more robustly
+          # Check if version follows major.minor.patch pattern
+          if [[ "$CURRENT_VERSION_NAME" =~ ^([0-9]+\.[0-9]+)\.([0-9]+)$ ]]; then
+            VERSION_BASE="${BASH_REMATCH[1]}"
+            VERSION_PATCH="${BASH_REMATCH[2]}"
+            NEW_VERSION_PATCH=$((VERSION_PATCH + 1))
+            NEW_VERSION_NAME="${VERSION_BASE}.${NEW_VERSION_PATCH}"
+          else
+            # Fallback: just increment the version code suffix
+            NEW_VERSION_NAME="${CURRENT_VERSION_NAME%.*}.$NEW_VERSION_CODE"
+          fi
+          
+          # Update compileSdkVersion
+          sed -i "s/compileSdkVersion [0-9]*/compileSdkVersion $LATEST_SDK/" app/build.gradle
+          
+          # Update targetSdkVersion
+          sed -i "s/targetSdkVersion [0-9]*/targetSdkVersion $LATEST_SDK/" app/build.gradle
+          
+          # Update versionCode
+          sed -i "s/versionCode [0-9]*/versionCode $NEW_VERSION_CODE/" app/build.gradle
+          
+          # Update versionName
+          sed -i "s/versionName \"[^\"]*\"/versionName \"$NEW_VERSION_NAME\"/" app/build.gradle
+          
+          echo "Updated compileSdkVersion and targetSdkVersion to $LATEST_SDK"
+          echo "Updated versionCode to $NEW_VERSION_CODE"
+          echo "Updated versionName to $NEW_VERSION_NAME"
+      
+      - name: Setup Gradle
+        uses: gradle/gradle-build-action@v3
+      
+      - name: Verify Gradle build
+        if: steps.check-update.outputs.update_needed == 'true'
+        run: |
+          # Note: Using 'gradle' command as this repo doesn't have a gradlew wrapper
+          # The gradle-build-action sets up gradle with the version specified in gradle-wrapper.properties
+          gradle assembleDebug --no-daemon
+      
+      - name: Create Pull Request
+        if: steps.check-update.outputs.update_needed == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: 'chore: Update Android SDK to ${{ steps.sdk-version.outputs.latest_sdk }}'
+          branch: automated/sdk-bump-${{ steps.sdk-version.outputs.latest_sdk }}
+          delete-branch: true
+          title: 'chore: Update Android SDK to ${{ steps.sdk-version.outputs.latest_sdk }}'
+          body: |
+            ## SDK Update
+            
+            This PR updates the Android SDK to the latest version.
+            
+            ### Changes
+            - compileSdkVersion: ${{ steps.current-versions.outputs.compile_sdk }} → ${{ steps.sdk-version.outputs.latest_sdk }}
+            - targetSdkVersion: ${{ steps.current-versions.outputs.target_sdk }} → ${{ steps.sdk-version.outputs.latest_sdk }}
+            - versionCode: ${{ steps.current-versions.outputs.version_code }} → incremented
+            - versionName: ${{ steps.current-versions.outputs.version_name }} → incremented
+            
+            This PR was automatically created by the monthly SDK bump workflow.
+            
+            ### Testing
+            - [x] Gradle build verification completed successfully
+            
+            Please review and merge if the build passes all checks.
+          labels: |
+            automated
+            sdk-update
+      
+      - name: No update needed
+        if: steps.check-update.outputs.update_needed == 'false'
+        run: echo "SDK is already at the latest version. No update needed."

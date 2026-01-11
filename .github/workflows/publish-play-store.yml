@@ -1,0 +1,129 @@
+name: Publish to Google Play
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'app/build.gradle'
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      should_publish: ${{ steps.version-check.outputs.should_publish }}
+      version_code: ${{ steps.get-version.outputs.version_code }}
+      version_name: ${{ steps.get-version.outputs.version_name }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      
+      - name: Get current version
+        id: get-version
+        run: |
+          VERSION_CODE=$(grep -oP 'versionCode \K[0-9]+' app/build.gradle)
+          VERSION_NAME=$(grep -oP 'versionName "\K[^"]+' app/build.gradle)
+          
+          echo "version_code=$VERSION_CODE" >> $GITHUB_OUTPUT
+          echo "version_name=$VERSION_NAME" >> $GITHUB_OUTPUT
+          
+          echo "Current versionCode: $VERSION_CODE"
+          echo "Current versionName: $VERSION_NAME"
+      
+      - name: Check if version changed
+        id: version-check
+        run: |
+          # Get the previous version from the parent commit
+          git checkout HEAD~1 -- app/build.gradle 2>/dev/null || true
+          
+          if [ -f app/build.gradle ]; then
+            PREV_VERSION_CODE=$(grep -oP 'versionCode \K[0-9]+' app/build.gradle || echo "0")
+          else
+            PREV_VERSION_CODE="0"
+          fi
+          
+          # Restore current version
+          git checkout HEAD -- app/build.gradle
+          
+          CURRENT_VERSION_CODE="${{ steps.get-version.outputs.version_code }}"
+          
+          echo "Previous versionCode: $PREV_VERSION_CODE"
+          echo "Current versionCode: $CURRENT_VERSION_CODE"
+          
+          if [ "$CURRENT_VERSION_CODE" != "$PREV_VERSION_CODE" ]; then
+            echo "should_publish=true" >> $GITHUB_OUTPUT
+            echo "Version changed - will proceed with publishing"
+          else
+            echo "should_publish=false" >> $GITHUB_OUTPUT
+            echo "Version unchanged - skipping publish"
+          fi
+  
+  publish:
+    needs: check-version
+    if: needs.check-version.outputs.should_publish == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      
+      - name: Setup Gradle
+        uses: gradle/gradle-build-action@v3
+      
+      - name: Decode keystore
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > ${{ github.workspace }}/release.keystore
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      
+      - name: Build Release AAB
+        run: |
+          # Note: Using 'gradle' command as this repo doesn't have a gradlew wrapper
+          # The gradle-build-action sets up gradle with the version specified in gradle-wrapper.properties
+          gradle bundleRelease --no-daemon
+        env:
+          SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+          SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
+      
+      - name: Upload to Google Play
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: com.destinyitemmanager.app
+          releaseFiles: app/build/outputs/bundle/release/app-release.aab
+          track: production
+          status: completed
+          whatsNewDirectory: distribution/whatsnew
+          mappingFile: app/build/outputs/mapping/release/mapping.txt
+      
+      - name: Create GitHub Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ needs.check-version.outputs.version_name }}
+          release_name: Release v${{ needs.check-version.outputs.version_name }}
+          body: |
+            ## Release v${{ needs.check-version.outputs.version_name }}
+            
+            Version Code: ${{ needs.check-version.outputs.version_code }}
+            
+            This release has been automatically published to Google Play Store.
+          draft: false
+          prerelease: false

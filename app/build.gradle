@@ -52,6 +52,21 @@ def twaManifest = [
 android {
     compileSdkVersion 36
     namespace 'com.destinyitemmanager.app'
+    
+    signingConfigs {
+        release {
+            if (System.getenv("SIGNING_KEY_ALIAS")) {
+                def keystorePath = System.getenv("GITHUB_WORKSPACE") 
+                    ? "${System.getenv('GITHUB_WORKSPACE')}/release.keystore"
+                    : "release.keystore"
+                storeFile file(keystorePath)
+                storePassword System.getenv("SIGNING_STORE_PASSWORD")
+                keyAlias System.getenv("SIGNING_KEY_ALIAS")
+                keyPassword System.getenv("SIGNING_KEY_PASSWORD")
+            }
+        }
+    }
+    
     defaultConfig {
         applicationId "com.destinyitemmanager.app"
         minSdkVersion 19
@@ -143,6 +158,9 @@ android {
     buildTypes {
         release {
             minifyEnabled true
+            if (System.getenv("SIGNING_KEY_ALIAS")) {
+                signingConfig signingConfigs.release
+            }
         }
     }
     compileOptions {
