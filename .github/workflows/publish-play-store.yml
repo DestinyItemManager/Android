@@ -89,8 +89,7 @@ jobs:
       
       - name: Build Release AAB
         run: |
-          chmod +x ./gradlew
-          ./gradlew bundleRelease --no-daemon
+          gradle bundleRelease --no-daemon
         env:
           SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
           SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}

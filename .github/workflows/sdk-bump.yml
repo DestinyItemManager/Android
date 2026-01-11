@@ -107,11 +107,13 @@ jobs:
           echo "Updated versionCode to $NEW_VERSION_CODE"
           echo "Updated versionName to $NEW_VERSION_NAME"
       
+      - name: Setup Gradle
+        uses: gradle/gradle-build-action@v3
+      
       - name: Verify Gradle build
         if: steps.check-update.outputs.update_needed == 'true'
         run: |
-          chmod +x ./gradlew
-          ./gradlew assembleDebug --no-daemon
+          gradle assembleDebug --no-daemon
       
       - name: Create Pull Request
         if: steps.check-update.outputs.update_needed == 'true'
