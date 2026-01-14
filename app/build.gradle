@@ -21,7 +21,7 @@ plugins {
 }
 
 def twaManifest = [
-    applicationId: 'com.destinyitemmanager.app',
+    applicationId: 'gg.dim.app',
     hostName: 'app.destinyitemmanager.com', // The domain being opened in the TWA.
     launchUrl: '/index.html?utm_source=android_app', // The start path for the TWA. Must be relative to the domain.
     name: 'DIM', // The application name.
@@ -51,9 +51,9 @@ def twaManifest = [
 
 android {
     compileSdkVersion 36
-    namespace 'com.destinyitemmanager.app'
+    namespace 'gg.dim.app'
     defaultConfig {
-        applicationId "com.destinyitemmanager.app"
+        applicationId "gg.dim.app"
         minSdkVersion 19
         targetSdkVersion 36
         versionCode 31
@@ -149,7 +149,7 @@ android {
         sourceCompatibility JavaVersion.VERSION_1_8
         targetCompatibility JavaVersion.VERSION_1_8
     }
-    lintOptions {
+    lint {
         checkReleaseBuilds false
     }
 }
